@@ -10,6 +10,7 @@ import { Transformer } from "./src/transformer";
 import { compareNumbers, getClasses, getEnums, getFunctions, getImports, getInterfaces, getTypeAliases } from "./src/utils";
 import * as ts from "typescript";
 import * as vscode from "vscode";
+import { ElementNode } from "./src/elements/element-node";
 
 export function activate(context: vscode.ExtensionContext)
 {
@@ -142,12 +143,17 @@ function print(groups: any, sourceCode: string, start: number, end: number, iden
 
             for (let group2 of group.groups)
             {
+                let lastNode: ElementNode | null = null;
                 for (let i = 0; i < group2.nodes.length; i++)
                 {
                     const node = group2.nodes[i];
                     let comment = sourceCode.substring(node.fullStart, node.start).trim();
                     let code = sourceCode.substring(node.start, node.end).trim();
-
+                    if (code.endsWith("}") && 
+                        lastNode != null && lastNode.name != node.name)
+                    {
+                        members += newLine;
+                    }
                     if (addPublicModifierIfMissing)
                     {
                         if (node instanceof MethodNode ||
@@ -157,10 +163,17 @@ function print(groups: any, sourceCode: string, start: number, end: number, iden
                         {
                             if (node.accessModifier === null)
                             {
-                                code = code.replace(`${node.name}:`, `public ${node.name}:`);
-                                code = code.replace(`${node.name} =`, `public ${node.name} =`);
-                                code = code.replace(`${node.name};`, `public ${node.name};`);
-                                code = code.replace(`${node.name}(`, `public ${node.name}(`);
+                                code = code.replace(`async ${node.name}`, `public async ${node.name}`);
+                                code = code.replace(`get ${node.name}`, `public get ${node.name}`);
+                                code = code.replace(`set ${node.name}`, `public set ${node.name}`);
+                                if(!code.includes("public get") && !code.includes("public set") &&
+                                    !code.includes(`public async ${node.name}`))
+                                {
+                                    code = code.replace(`${node.name}:`, `public ${node.name}:`);
+                                    code = code.replace(`${node.name} =`, `public ${node.name} =`);
+                                    code = code.replace(`${node.name};`, `public ${node.name};`);
+                                    code = code.replace(`${node.name}(`, `public ${node.name}(`);
+                                }
                             }
                         }
                     }
@@ -184,11 +197,8 @@ function print(groups: any, sourceCode: string, start: number, end: number, iden
 
                     members += `${identationLevel === 1 ? identation : ""}${code}`;
                     members += newLine;
-
-                    if (code.endsWith("}"))
-                    {
-                        members += newLine;
-                    }
+                    
+                    lastNode = node;
                 }
 
                 members += newLine;
@@ -290,6 +300,37 @@ function organizeCode(sourceCode: string, fileName: string, useRegions: boolean,
         else if (element instanceof ClassNode)
         {
             let classNode = <ClassNode>element;
+            let propertyMap = new Map<string, ElementNode[]>();
+            for(let property of classNode.getters.concat(classNode.setters))
+            {
+                if(!propertyMap.has(property.name)) {
+                    propertyMap.set(property.name, []);
+                }
+                let mapping = propertyMap.get(property.name);
+                if(mapping != null)
+                {
+                    mapping.push(property);
+                }
+            }
+            for(let propertyGroup of propertyMap.entries())
+            {
+                let propertyNodes = propertyGroup[1];
+                let decorators = new Array<string>();
+                for(let propertyNode of propertyNodes)
+                {
+                    for(let decorator of propertyNode.decorators) 
+                    {
+                        if(decorators.indexOf(decorator) == -1)
+                        {
+                            decorators.push(decorator);
+                        }
+                    }
+                }
+                for(let propertyNode of propertyNodes)
+                {
+                    propertyNode.decorators = decorators;
+                }
+            }
             let groups = [
                 {
                     description: "Properties",
