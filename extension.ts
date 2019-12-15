@@ -15,7 +15,7 @@ import { ElementNode } from "./src/elements/element-node";
 export function activate(context: vscode.ExtensionContext)
 {
     context.subscriptions.push(vscode.commands.registerCommand('tsco.organize', () => organize(vscode.window.activeTextEditor, getUseRegionsConfig(), getAddPublicModifierIfMissing(), getAddRegionIdentationConfig(), getAddRegionCaptionToRegionEnd(), getGroupPropertiesByDecorators())));
-    context.subscriptions.push(vscode.commands.registerCommand('tsco.organizeAll', () => organizeAll(getUseRegionsConfig(), getAddPublicModifierIfMissing(), getAddRegionIdentationConfig(), getAddRegionCaptionToRegionEnd(), getGroupPropertiesByDecorators())));
+    context.subscriptions.push(vscode.commands.registerCommand('tsco.organizeAll', () => organizeAll(getUseRegionsConfig(), getAddPublicModifierIfMissing(), getAddRegionIdentationConfig(), getAddRegionCaptionToRegionEnd(), getGroupPropertiesByDecorators(), getFilesToInclude(), getFilesToExclude())));
 }
 
 function getUseRegionsConfig(): boolean
@@ -52,6 +52,16 @@ function getGroupPropertiesByDecorators(): boolean
     return vscode.workspace.getConfiguration("tsco").get<boolean>("groupPropertiesWithDecorators") === true;
 }
 
+function getFilesToInclude(): string
+{
+    return vscode.workspace.getConfiguration("tsco").get<string>("filesToInclude") || "**/*.ts";
+}
+
+function getFilesToExclude(): string
+{
+    return vscode.workspace.getConfiguration("tsco").get<string>("filesToExclude") || "**/node_modules/**";
+}
+
 function getIdentation(sourceCode: string): string
 {
     let tab = "\t";
@@ -77,7 +87,7 @@ function getIdentation(sourceCode: string): string
     return twoSpaces;
 }
 
-function organizeAll(useRegions: boolean, addPublicModifierIfMissing: boolean, addIdentation: boolean, addRegionCaptionToRegionEnd: boolean, groupPropertiesWithDecorators: boolean) {
+function organizeAll(useRegions: boolean, addPublicModifierIfMissing: boolean, addIdentation: boolean, addRegionCaptionToRegionEnd: boolean, groupPropertiesWithDecorators: boolean, filesToInclude: string, filesToExclude: string) {
     let fileStack = new Array<vscode.Uri>();
     let processNextStackItem = () => {
         if (fileStack.length) {
@@ -92,7 +102,7 @@ function organizeAll(useRegions: boolean, addPublicModifierIfMissing: boolean, a
             }
         }
     };
-    vscode.workspace.findFiles("**/*.ts", "**/node_modules/**")
+    vscode.workspace.findFiles(filesToInclude, filesToExclude)
         .then(typescriptFiles => {
             fileStack = typescriptFiles.slice();
             processNextStackItem();
@@ -176,11 +186,17 @@ function print(groups: any, sourceCode: string, start: number, end: number, iden
                         {
                             if (node.accessModifier === null)
                             {
-                                code = code.replace(`async ${node.name}`, `public async ${node.name}`);
-                                code = code.replace(`get ${node.name}`, `public get ${node.name}`);
-                                code = code.replace(`set ${node.name}`, `public set ${node.name}`);
-                                if(!code.includes("public get") && !code.includes("public set") &&
-                                    !code.includes(`public async ${node.name}`))
+                                const prefixes = ["static", "async", "get", "set", "readonly", "abstract\s+get", "abstract\s+set", "abstract"];
+                                let done = false;
+                                for (let i = 0; i < prefixes.length; i++) {
+                                    let newCode = code.replace(new RegExp(`${prefixes[i]}\s+${node.name}`), `public ${prefixes[i]} ${node.name}`);
+                                    if(newCode.length > code.length){
+                                        code = newCode;
+                                        done = true;
+                                        break;
+                                    }
+                                }
+                                if(!done)
                                 {
                                     code = code.replace(`${node.name}:`, `public ${node.name}:`);
                                     code = code.replace(`${node.name} =`, `public ${node.name} =`);

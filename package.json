@@ -77,6 +77,16 @@
                     "type": "boolean",
                     "default": false,
                     "description": "When true properties with decorators will come first."
+                },
+                "tsco.filesToInclude": {
+                    "type": "string",
+                    "default": "**/*.ts",
+                    "description": "Glob pattern of files to include when organizing all files."
+                },
+                "tsco.filesToExclude": {
+                    "type": "string",
+                    "default": "**/node_modules/**",
+                    "description": "Glob pattern of files to exclude when organizing all files."
                 }
             }
         },
