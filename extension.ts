@@ -77,13 +77,26 @@ function getIdentation(sourceCode: string): string
     return twoSpaces;
 }
 
-function organizeAll(useRegions: boolean, addPublicModifierIfMissing: boolean, addIdentation: boolean, addRegionCaptionToRegionEnd: boolean, groupPropertiesWithDecorators: boolean)
-{
+function organizeAll(useRegions: boolean, addPublicModifierIfMissing: boolean, addIdentation: boolean, addRegionCaptionToRegionEnd: boolean, groupPropertiesWithDecorators: boolean) {
+    let fileStack = new Array<vscode.Uri>();
+    let processNextStackItem = () => {
+        if (fileStack.length) {
+            let typescriptFile = fileStack.pop();
+            if (typescriptFile !== undefined) {
+                vscode.workspace.openTextDocument(typescriptFile)
+                    .then(document => vscode.window.showTextDocument(document)
+                        .then(editor => {
+                            organize(editor, useRegions, addPublicModifierIfMissing, addIdentation, addRegionCaptionToRegionEnd, groupPropertiesWithDecorators);
+                            processNextStackItem();
+                        }));
+            }
+        }
+    };
     vscode.workspace.findFiles("**/*.ts", "**/node_modules/**")
-        .then(typescriptFiles => typescriptFiles.forEach(typescriptFile => vscode.workspace.openTextDocument(typescriptFile)
-            .then(document => vscode.window.showTextDocument(document)
-                .then(editor => organize(editor, useRegions, addPublicModifierIfMissing, addIdentation, addRegionCaptionToRegionEnd, groupPropertiesWithDecorators) !== null))));
-
+        .then(typescriptFiles => {
+            fileStack = typescriptFiles.slice();
+            processNextStackItem();
+        });
 }
 
 function organize(editor: vscode.TextEditor | undefined, useRegions: boolean, addPublicModifierIfMissing: boolean, addRegionIdentation: boolean, addRegionCaptionToRegionEnd: boolean, groupElementsWithDecorators: boolean)
